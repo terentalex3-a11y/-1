@@ -30,6 +30,7 @@ func _ready():
     inventory_screen.item_equipped.connect(equip_item)
     mobile_controls = preload("res://scripts/mobile_controls.gd").new()
     add_child(mobile_controls)
+    mobile_controls.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     mobile_controls.move_requested.connect(on_mobile_move)
     mobile_controls.action_requested.connect(on_mobile_action)
     queue_redraw()
@@ -148,7 +149,7 @@ func shoot():
     if wounds.arm >= 20:
         chance -= 15
     if rng.randi_range(1, 100) <= chance:
-        var part := ["head", "torso", "arm", "leg"][rng.randi_range(0, 3)]
+        var part = ["head", "torso", "arm", "leg"][rng.randi_range(0, 3)]
         var result = preload("res://scripts/combat_system.gd").body_damage(part, int(weapon.get("damage", 20)))
         enemy_hp[selected_enemy] -= int(result.damage)
         message = "Попадание: %s. Урон %d." % [part, int(result.damage)]
@@ -182,7 +183,7 @@ func enemy_turn():
     if not combat: return
     if rng.randi_range(1, 100) <= 55:
         var raw_damage := rng.randi_range(8, 18)
-        var part := preload("res://scripts/combat_system.gd").choose_body_part(rng)
+        var part = preload("res://scripts/combat_system.gd").choose_body_part(rng)
         wounds[part] = int(wounds.get(part, 0)) + raw_damage
         var protection := int(state.body_armor.get("protection", 0))
         var dmg := max(1, raw_damage - protection / 2)
