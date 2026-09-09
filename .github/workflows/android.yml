@@ -1,0 +1,33 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.5.1
+          use-dotnet: false
+          include-android: true
+
+      - name: Import project
+        run: godot --headless --editor --quit --path .
+
+      - name: Build APK
+        run: mkdir -p build && godot --headless --path . --export-debug "Android" build/PostApocalypseRPG.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PostApocalypseRPG-APK
+          path: build/PostApocalypseRPG.apk
+          if-no-files-found: error
