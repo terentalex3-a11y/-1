@@ -17,7 +17,8 @@ jobs:
         with:
           version: 4.5.1
           use-dotnet: false
-          include-android: true
+          include-templates: true
+          cache: true
 
       - name: Import project
         run: godot --headless --editor --quit --path .
