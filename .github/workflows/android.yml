@@ -24,6 +24,23 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platform-tools" "build-tools;36.1.0" "platforms;android-36"
 
+      - name: Configure Godot Android settings
+        run: |
+          mkdir -p ~/.config/godot
+          cat > ~/.config/godot/editor_settings-4.5.tres <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          export/android/shutdown_adb_on_exit = true
+          export/android/force_system_user = false
+          EOF
+
       - name: Setup Godot
         uses: chickensoft-games/setup-godot@v2
         with:
@@ -37,6 +54,9 @@ jobs:
 
       - name: Build APK
         run: mkdir -p build && godot --headless --path . --export-debug "Android" build/PostApocalypseRPG.apk
+
+      - name: Verify APK
+        run: test -s build/PostApocalypseRPG.apk && ls -lh build/PostApocalypseRPG.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
