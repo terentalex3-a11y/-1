@@ -52,6 +52,16 @@ jobs:
           include-templates: true
           cache: true
 
+      - name: Keep HP persistent
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("scripts/main.gd")
+          text = p.read_text()
+          text = text.replace("    while xp >= level * 100:\n        level += 1\n        hp = max_hp\n", "    while xp >= level * 100:\n        level += 1\n")
+          p.write_text(text)
+          PY
+
       - name: Import project
         run: godot --headless --editor --quit --path .
 
