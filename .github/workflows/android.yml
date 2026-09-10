@@ -24,6 +24,11 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platform-tools" "build-tools;36.1.0" "platforms;android-36"
 
+      - name: Create debug keystore
+        run: |
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
       - name: Configure Godot Android settings
         run: |
           mkdir -p ~/.config/godot
@@ -53,7 +58,7 @@ jobs:
         run: godot --headless --editor --quit --path .
 
       - name: Build APK
-        run: mkdir -p build && godot --headless --path . --export-debug "Android" build/PostApocalypseRPG.apk
+        run: mkdir -p build && godot --headless --verbose --path . --export-debug "Android" build/PostApocalypseRPG.apk
 
       - name: Verify APK
         run: test -s build/PostApocalypseRPG.apk && ls -lh build/PostApocalypseRPG.apk
