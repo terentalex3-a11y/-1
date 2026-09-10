@@ -22,7 +22,7 @@ jobs:
         uses: android-actions/setup-android@v4
 
       - name: Install Android SDK packages
-        run: sdkmanager "platform-tools" "build-tools;36.1.0" "platforms;android-36"
+        run: sdkmanager "platform-tools" "build-tools;35.0.1" "platforms;android-35"
 
       - name: Create debug keystore
         run: |
@@ -42,8 +42,6 @@ jobs:
           export/android/debug_keystore = "$HOME/.android/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
-          export/android/shutdown_adb_on_exit = true
-          export/android/force_system_user = false
           EOF
 
       - name: Setup Godot
