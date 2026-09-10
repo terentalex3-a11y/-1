@@ -17,6 +17,7 @@ var selected_enemy := -1
 var enemy_hp := [55, 45]
 var wounds := {"head":0, "torso":0, "arm":0, "leg":0}
 var rng := RandomNumberGenerator.new()
+var ui_hover := ""
 
 func _ready():
     rng.randomize()
@@ -42,20 +43,36 @@ func _input(event):
         return
     if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
         handle_pointer(event.position)
+    elif event is InputEventScreenTouch and event.pressed:
+        handle_pointer(event.position)
 
 func handle_pointer(p: Vector2):
     var s := get_viewport_rect().size
     var sx := s.x / 1280.0
     var sy := s.y / 720.0
     var point := Vector2(p.x / sx, p.y / sy)
+    # Persistent, clearly visible action bar.
+    if Rect2(20, 580, 210, 120).has_point(point):
+        open_inventory()
+        return
+    if Rect2(245, 580, 210, 120).has_point(point):
+        if combat: end_turn()
+        else: message = "Завершить ход можно во время боя."
+        return
+    if Rect2(470, 580, 250, 120).has_point(point):
+        if combat: heal()
+        else: message = "Лечение доступно в бою."
+        return
+    if Rect2(735, 580, 250, 120).has_point(point):
+        if combat: shoot()
+        else: message = "Стрельба доступна после встречи с врагом."
+        return
     if Rect2(1030, 10, 230, 60).has_point(point):
         open_inventory()
         return
     if combat:
-        if Rect2(1010, 575, 250, 125).has_point(point): shoot()
-        elif Rect2(755, 575, 240, 125).has_point(point): heal()
-        elif Rect2(500, 575, 240, 125).has_point(point): end_turn()
-    elif ap > 0 and point.y > 70 and point.y < 570:
+        return
+    if ap > 0 and point.y > 70 and point.y < 565:
         player_pos = player_pos.move_toward(point, 90)
         ap -= 1
         check_interactions()
@@ -66,7 +83,7 @@ func on_mobile_move(direction: Vector2):
     var movement := direction * (90.0 if wounds.leg < 20 else 55.0)
     player_pos += movement
     player_pos.x = clamp(player_pos.x, 30.0, 1250.0)
-    player_pos.y = clamp(player_pos.y, 80.0, 550.0)
+    player_pos.y = clamp(player_pos.y, 90.0, 550.0)
     ap -= 1
     check_interactions()
 
@@ -145,8 +162,7 @@ func shoot():
     ap -= 2
     var weapon: Dictionary = state.inventory[state.equipped_weapon] if state.equipped_weapon < state.inventory.size() else {"damage":20}
     var chance: int = clamp(65 - int(player_pos.distance_to(enemies[selected_enemy]) / 20), 15, 90)
-    if wounds.arm >= 20:
-        chance -= 15
+    if wounds.arm >= 20: chance -= 15
     if rng.randi_range(1, 100) <= chance:
         var part: String = ["head", "torso", "arm", "leg"][rng.randi_range(0, 3)]
         var result: Dictionary = preload("res://scripts/combat_system.gd").body_damage(part, int(weapon.get("damage", 20)))
@@ -176,7 +192,8 @@ func find_medical() -> int:
     return -1
 
 func end_turn():
-    enemy_turn()
+    if combat: enemy_turn()
+    else: message = "Сейчас нет противника: исследуйте район."
 
 func enemy_turn():
     if not combat: return
@@ -207,36 +224,95 @@ func _draw():
     var scale_x := s.x / 1280.0
     var scale_y := s.y / 720.0
     draw_set_transform(Vector2.ZERO, 0.0, Vector2(scale_x, scale_y))
-    draw_rect(Rect2(0, 0, 1280, 720), Color("171717"))
+    draw_rect(Rect2(0, 0, 1280, 720), Color("121417"))
+
+    # Ruined city ground and streets.
+    draw_rect(Rect2(0, 70, 1280, 495), Color("252a29"))
+    draw_rect(Rect2(0, 300, 1280, 100), Color("303333"))
+    draw_rect(Rect2(560, 70, 150, 495), Color("303333"))
     for x in range(0, 1280, 160):
-        for y in range(70, 570, 130):
-            draw_rect(Rect2(x + 8, y + 8, 135, 105), Color("303030"))
-            draw_line(Vector2(x + 8, y + 8), Vector2(x + 143, y + 113), Color("454545"), 2)
-    draw_rect(Rect2(0, 320, 1280, 70), Color("222222"))
-    draw_rect(Rect2(590, 70, 100, 500), Color("222222"))
-    draw_circle(Vector2(640, 360), 42, Color("58705a"))
-    draw_string(ThemeDB.fallback_font, Vector2(605, 355), "УБЕЖИЩЕ", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
+        draw_line(Vector2(x, 350), Vector2(x + 70, 350), Color("5b5d57"), 3)
+    for y in range(100, 560, 150):
+        draw_line(Vector2(635, y), Vector2(635, y + 55), Color("5b5d57"), 3)
+
+    # Damaged buildings, rubble and windows.
+    var buildings = [Rect2(20,90,250,180), Rect2(300,95,220,165), Rect2(760,90,230,175), Rect2(1030,100,220,170), Rect2(20,420,250,120), Rect2(290,420,230,125), Rect2(760,420,230,125), Rect2(1030,415,220,130)]
+    for b in buildings:
+        draw_rect(b, Color("3a3d3c"))
+        draw_rect(Rect2(b.position + Vector2(8,8), b.size - Vector2(16,16)), Color("303332"), false, 3)
+        for wx in range(int(b.position.x + 25), int(b.end.x - 20), 45):
+            draw_rect(Rect2(wx, b.position.y + 28, 22, 16), Color("565951"))
+            if int(wx / 45) % 3 == 0:
+                draw_line(Vector2(wx, b.position.y + 28), Vector2(wx + 22, b.position.y + 44), Color("242725"), 2)
+        draw_line(b.position + Vector2(12, b.size.y - 18), b.end - Vector2(12,18), Color("1b1d1c"), 5)
+
+    # Rubble piles.
+    for r in [Vector2(280,285),Vector2(735,275),Vector2(540,475),Vector2(1005,380),Vector2(75,350)]:
+        draw_circle(r, 24, Color("1d201f"))
+        draw_circle(r + Vector2(-9,-5), 9, Color("55524b"))
+        draw_circle(r + Vector2(11,7), 7, Color("67635a"))
+
+    # Shelter.
+    draw_rect(Rect2(575,315,130,90), Color("4b5d4d"))
+    draw_rect(Rect2(585,325,110,70), Color("354436"))
+    draw_rect(Rect2(610,345,60,50), Color("1a201b"))
+    draw_string(ThemeDB.fallback_font, Vector2(592,312), "УБЕЖИЩЕ", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("d9e0d6"))
+    draw_circle(Vector2(640,335), 7, Color("d5a84c"))
+
+    # Loot crates.
     for p in loot:
-        draw_circle(p, 15, Color("c2a44d"))
-        draw_string(ThemeDB.fallback_font, p + Vector2(-18, 32), "ЛУТ", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("e6d58a"))
+        draw_rect(Rect2(p - Vector2(16,13), Vector2(32,26)), Color("80663a"))
+        draw_rect(Rect2(p - Vector2(13,10), Vector2(26,20)), Color("a4874e"), false, 3)
+        draw_line(p + Vector2(-13,0), p + Vector2(13,0), Color("5d4929"), 3)
+        draw_string(ThemeDB.fallback_font, p + Vector2(-18,31), "ПРИПАСЫ", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("e1c777"))
+
+    # Enemies: human silhouettes instead of circles.
     for i in range(enemies.size()):
         if enemies[i].x > 0:
-            draw_circle(enemies[i], 22, Color("8a3d3d"))
-            draw_string(ThemeDB.fallback_font, enemies[i] + Vector2(-22, 38), "ВРАГ", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("d98b8b"))
-    draw_circle(player_pos, 20, Color("6b8fb3"))
-    draw_rect(Rect2(0, 0, 1280, 70), Color("101010"))
-    draw_string(ThemeDB.fallback_font, Vector2(25, 30), "POST APOCALYPSE RPG", HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
-    draw_string(ThemeDB.fallback_font, Vector2(380, 29), "HP %d/100   AP %d   Патроны %d   LVL %d   XP %d" % [hp, ap, ammo, level, xp], HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("d5d5d5"))
-    draw_string(ThemeDB.fallback_font, Vector2(25, 600), "Ранения: голова %d | корпус %d | рука %d | нога %d" % [wounds.head, wounds.torso, wounds.arm, wounds.leg], HORIZONTAL_ALIGNMENT_LEFT, 800, 15, Color("c99b9b"))
-    draw_string(ThemeDB.fallback_font, Vector2(25, 635), message, HORIZONTAL_ALIGNMENT_LEFT, 1000, 17, Color("eeeeee"))
-    if combat:
-        draw_rect(Rect2(0, 555, 1280, 165), Color("111111"))
-        draw_string(ThemeDB.fallback_font, Vector2(25, 585), "ПОШАГОВЫЙ БОЙ", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color("e8c9a0"))
-        draw_button(Rect2(500, 590, 240, 115), "Завершить ход")
-        draw_button(Rect2(755, 590, 240, 115), "Лечиться")
-        draw_button(Rect2(1010, 590, 250, 115), "СТРЕЛЯТЬ")
+            var ep: Vector2 = enemies[i]
+            draw_circle(ep + Vector2(0,-20), 10, Color("c0a18c"))
+            draw_rect(Rect2(ep + Vector2(-12,-10), Vector2(24,34)), Color("7b3f3f"))
+            draw_line(ep + Vector2(-5,23), ep + Vector2(-12,38), Color("242424"), 6)
+            draw_line(ep + Vector2(5,23), ep + Vector2(12,38), Color("242424"), 6)
+            draw_line(ep + Vector2(7,0), ep + Vector2(27,-9), Color("222222"), 5)
+            draw_string(ThemeDB.fallback_font, ep + Vector2(-27,55), "ВРАГ  %d HP" % enemy_hp[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("e3a0a0"))
+            if combat and i == selected_enemy:
+                draw_arc(ep, 34, 0, TAU, 32, Color("d8b05c"), 3)
 
-func draw_button(rect: Rect2, text: String):
-    draw_rect(rect, Color("353535"))
-    draw_rect(rect, Color("777777"), false, 3)
-    draw_string(ThemeDB.fallback_font, rect.position + Vector2(20, 67), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color.WHITE)
+    # Player: visible survivor silhouette.
+    draw_circle(player_pos + Vector2(0,-18), 10, Color("c9ad98"))
+    draw_rect(Rect2(player_pos + Vector2(-13,-8), Vector2(26,36)), Color("4d667b"))
+    draw_line(player_pos + Vector2(-6,26), player_pos + Vector2(-13,42), Color("202326"), 7)
+    draw_line(player_pos + Vector2(6,26), player_pos + Vector2(13,42), Color("202326"), 7)
+    draw_line(player_pos + Vector2(9,0), player_pos + Vector2(27,-10), Color("17191b"), 5)
+    draw_circle(player_pos + Vector2(0,-18), 13, Color("7e9ab0"), false, 2)
+
+    # Top HUD.
+    draw_rect(Rect2(0,0,1280,70), Color("0b0d0f"))
+    draw_string(ThemeDB.fallback_font, Vector2(24,31), "ПЕПЕЛ И РУИНЫ", HORIZONTAL_ALIGNMENT_LEFT, -1, 25, Color("e4e0d5"))
+    draw_string(ThemeDB.fallback_font, Vector2(285,30), "HP %d/100" % hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("d58e8e"))
+    draw_string(ThemeDB.fallback_font, Vector2(410,30), "AP %d/6" % ap, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("d9c27d"))
+    draw_string(ThemeDB.fallback_font, Vector2(515,30), "ПАТРОНЫ %d" % ammo, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("c7c7bd"))
+    draw_string(ThemeDB.fallback_font, Vector2(690,30), "LVL %d   XP %d" % [level,xp], HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("a9b8c4"))
+    draw_button(Rect2(1030,10,230,50), "🎒  ИНВЕНТАРЬ", false)
+
+    # Message and wounds.
+    draw_rect(Rect2(0,545,1280,35), Color("101214"))
+    draw_string(ThemeDB.fallback_font, Vector2(22,568), message, HORIZONTAL_ALIGNMENT_LEFT, 1235, 15, Color("e2e2de"))
+
+    # Permanent mobile-friendly action bar.
+    draw_rect(Rect2(0,575,1280,145), Color("0b0d0f"))
+    draw_string(ThemeDB.fallback_font, Vector2(22,598), "РАНЕНИЯ  голова %d   корпус %d   рука %d   нога %d" % [wounds.head,wounds.torso,wounds.arm,wounds.leg], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("c68f8f"))
+    draw_button(Rect2(20,610,210,95), "🎒  ИНВЕНТАРЬ", false)
+    draw_button(Rect2(245,610,210,95), "⏳  ЗАВЕРШИТЬ\nХОД", combat)
+    draw_button(Rect2(470,610,250,95), "✚  ЛЕЧИТЬСЯ", combat)
+    draw_button(Rect2(735,610,250,95), "▰  СТРЕЛЯТЬ", combat)
+    draw_button(Rect2(1000,610,260,95), "AP  %d/6" % ap, false)
+
+func draw_button(rect: Rect2, text: String, active: bool):
+    var fill := Color("4a3b29") if active else Color("292d2f")
+    draw_rect(rect, fill)
+    draw_rect(rect, Color("8b8e88"), false, 2)
+    var lines := text.split("\n")
+    for j in range(lines.size()):
+        draw_string(ThemeDB.fallback_font, rect.position + Vector2(18,40 + j*25), lines[j], HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("f0eee6"))
