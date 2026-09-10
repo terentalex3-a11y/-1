@@ -13,7 +13,7 @@ var shelter_level := 1
 var saved := false
 
 func inventory_weight() -> float:
-    var total := body_armor.weight
+    var total: float = float(body_armor.get("weight", 0.0))
     for item in inventory:
         total += float(item.get("weight", 0.0)) * float(item.get("count", 1))
     return total
