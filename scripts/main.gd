@@ -91,7 +91,7 @@ func use_item(index: int):
     var item = state.inventory[index]
     if item.get("type", "") == "medical":
         hp = min(100, hp + int(item.get("heal", 25)))
-        var count := int(item.get("count", 1))
+        var count: int = int(item.get("count", 1))
         if count > 1: item["count"] = count - 1
         else: state.inventory.remove_at(index)
         message = "%s использован." % item.get("name", "Предмет")
@@ -143,13 +143,13 @@ func shoot():
         return
     ammo -= 1
     ap -= 2
-    var weapon = state.inventory[state.equipped_weapon] if state.equipped_weapon < state.inventory.size() else {"damage":20}
-    var chance = clamp(65 - int(player_pos.distance_to(enemies[selected_enemy]) / 20), 15, 90)
+    var weapon: Dictionary = state.inventory[state.equipped_weapon] if state.equipped_weapon < state.inventory.size() else {"damage":20}
+    var chance: int = clamp(65 - int(player_pos.distance_to(enemies[selected_enemy]) / 20), 15, 90)
     if wounds.arm >= 20:
         chance -= 15
     if rng.randi_range(1, 100) <= chance:
         var part: String = ["head", "torso", "arm", "leg"][rng.randi_range(0, 3)]
-        var result = preload("res://scripts/combat_system.gd").body_damage(part, int(weapon.get("damage", 20)))
+        var result: Dictionary = preload("res://scripts/combat_system.gd").body_damage(part, int(weapon.get("damage", 20)))
         enemy_hp[selected_enemy] -= int(result.damage)
         message = "Попадание: %s. Урон %d." % [part, int(result.damage)]
         if enemy_hp[selected_enemy] <= 0:
@@ -164,7 +164,7 @@ func shoot():
     enemy_turn()
 
 func heal():
-    var index := find_medical()
+    var index: int = find_medical()
     if index < 0: return
     use_item(index)
     if combat: enemy_turn()
@@ -181,11 +181,11 @@ func end_turn():
 func enemy_turn():
     if not combat: return
     if rng.randi_range(1, 100) <= 55:
-        var raw_damage := rng.randi_range(8, 18)
+        var raw_damage: int = rng.randi_range(8, 18)
         var part: String = preload("res://scripts/combat_system.gd").choose_body_part(rng)
         wounds[part] = int(wounds.get(part, 0)) + raw_damage
-        var protection := int(state.body_armor.get("protection", 0))
-        var dmg := max(1, raw_damage - protection / 2)
+        var protection: int = int(state.body_armor.get("protection", 0))
+        var dmg: int = max(1, raw_damage - protection / 2)
         hp -= dmg
         message += " Враг ранит %s: %d урона." % [part, dmg]
         if part == "leg": message += " Движение снижено."
