@@ -13,9 +13,9 @@ func _ready():
     mouse_filter = Control.MOUSE_FILTER_IGNORE
     queue_redraw()
 
-func _gui_input(event):
+func _input(event):
     if event is InputEventScreenTouch:
-        if event.pressed and event.position.x < size.x * 0.45 and event.position.y > size.y * 0.45:
+        if event.pressed and event.position.x < get_viewport_rect().size.x * 0.38 and event.position.y > get_viewport_rect().size.y * 0.45:
             active_touch = event.index
             joystick_center = event.position
             joystick_knob = event.position
@@ -35,26 +35,10 @@ func _gui_input(event):
 
 func _draw():
     if joystick_center != Vector2.ZERO:
-        draw_circle(joystick_center, joystick_radius, Color(0.15,0.15,0.15,0.65))
-        draw_circle(joystick_center, joystick_radius, Color(0.65,0.65,0.65,0.7), false, 3)
-        draw_circle(joystick_knob, 34, Color(0.35,0.45,0.55,0.9))
-
-func _unhandled_input(event):
-    if event is InputEventMouseButton and event.pressed:
-        _handle_action(event.position)
-    elif event is InputEventScreenTouch and event.pressed and active_touch == -1:
-        _handle_action(event.position)
-
-func _handle_action(p: Vector2):
-    if p.y < size.y * 0.18 and p.x > size.x * 0.78:
-        action_requested.emit("inventory")
-    elif p.y > size.y * 0.76:
-        if p.x > size.x * 0.78:
-            action_requested.emit("shoot")
-        elif p.x > size.x * 0.59:
-            action_requested.emit("heal")
-        elif p.x > size.x * 0.40:
-            action_requested.emit("end_turn")
+        draw_circle(joystick_center, joystick_radius, Color(0.08,0.09,0.09,0.82))
+        draw_circle(joystick_center, joystick_radius, Color(0.72,0.72,0.68,0.85), false, 3)
+        draw_circle(joystick_knob, 34, Color(0.32,0.42,0.50,0.95))
+        draw_string(ThemeDB.fallback_font, joystick_center + Vector2(-42,115), "ДВИЖЕНИЕ", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("d8d8d2"))
 
 func set_mobile_mode(enabled: bool):
     visible = enabled
