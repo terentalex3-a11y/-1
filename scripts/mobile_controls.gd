@@ -25,7 +25,7 @@ func _gui_input(event):
             joystick_knob = joystick_center
             queue_redraw()
     elif event is InputEventScreenDrag and event.index == active_touch:
-        var delta := event.position - joystick_center
+        var delta: Vector2 = event.position - joystick_center
         if delta.length() > joystick_radius:
             delta = delta.normalized() * joystick_radius
         joystick_knob = joystick_center + delta
