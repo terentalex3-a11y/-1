@@ -16,7 +16,7 @@ func setup(items: Array[Dictionary], equipped_armor: Dictionary) -> void:
 
 func _input(event):
     if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-        var p := event.position
+        var p: Vector2 = event.position
         if Rect2(1030, 35, 210, 55).has_point(p):
             closed.emit()
             return
@@ -39,15 +39,15 @@ func _draw():
     draw_string(ThemeDB.fallback_font, Vector2(805, 110), "БРОНЯ", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color("d9c39a"))
     draw_string(ThemeDB.fallback_font, Vector2(805, 140), "%s  | защита %d" % [armor.get("name", "Нет"), int(armor.get("protection", 0))], HORIZONTAL_ALIGNMENT_LEFT, 380, 16, Color.WHITE)
     for i in inventory.size():
-        var y := 145 + i * 48
+        var y: float = 145 + i * 48
         var active := i == selected
         draw_rect(Rect2(55, y, 730, 42), Color("3a3a3a") if active else Color("292929"))
-        var item = inventory[i]
-        var count := int(item.get("count", 1))
+        var item: Dictionary = inventory[i]
+        var count: int = int(item.get("count", 1))
         draw_string(ThemeDB.fallback_font, Vector2(70, y + 27), "%d. %s x%d" % [i + 1, item.get("name", "Предмет"), count], HORIZONTAL_ALIGNMENT_LEFT, 500, 17, Color.WHITE)
         draw_string(ThemeDB.fallback_font, Vector2(600, y + 27), "%.1f кг" % (float(item.get("weight", 0.0)) * count), HORIZONTAL_ALIGNMENT_LEFT, 130, 15, Color("bbbbbb"))
     if selected >= 0 and selected < inventory.size():
-        var item = inventory[selected]
+        var item: Dictionary = inventory[selected]
         draw_string(ThemeDB.fallback_font, Vector2(805, 230), "ВЫБРАНО", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("d9c39a"))
         draw_string(ThemeDB.fallback_font, Vector2(805, 265), str(item.get("name", "Предмет")), HORIZONTAL_ALIGNMENT_LEFT, 380, 24, Color.WHITE)
         draw_string(ThemeDB.fallback_font, Vector2(805, 305), details(item), HORIZONTAL_ALIGNMENT_LEFT, 380, 16, Color("cccccc"))
@@ -56,7 +56,7 @@ func _draw():
     button(Rect2(1030, 35, 210, 55), "Назад")
 
 func weight() -> float:
-    var total := float(armor.get("weight", 0.0))
+    var total: float = float(armor.get("weight", 0.0))
     for item in inventory:
         total += float(item.get("weight", 0.0)) * float(item.get("count", 1))
     return total
