@@ -12,6 +12,7 @@ window/stretch/aspect="expand"
 
 [display/window]
 handheld/orientation=0
+size/resizable=true
 
 [rendering]
 renderer/rendering_method="gl_compatibility"
