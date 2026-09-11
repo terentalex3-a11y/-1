@@ -11,39 +11,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
-
       - name: Install Android SDK packages
         run: sdkmanager "platform-tools" "build-tools;35.0.1" "platforms;android-35"
-
       - name: Create debug keystore
         run: |
           mkdir -p "$HOME/.android"
           keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-
       - name: Configure Godot Android settings
         run: |
           mkdir -p ~/.config/godot
           cat > ~/.config/godot/editor_settings-4.5.tres <<EOF
           [gd_resource type="EditorSettings" format=3]
-
           [resource]
-
           export/android/android_sdk_path = "$ANDROID_HOME"
           export/android/java_sdk_path = "$JAVA_HOME"
           export/android/debug_keystore = "$HOME/.android/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
-
       - name: Setup Godot
         uses: chickensoft-games/setup-godot@v2
         with:
@@ -51,26 +43,22 @@ jobs:
           use-dotnet: false
           include-templates: true
           cache: true
-
-      - name: Keep HP persistent
+      - name: Fix GDScript type inference
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path("scripts/main.gd")
           text = p.read_text()
-          text = text.replace("    while xp >= level * 100:\n        level += 1\n        hp = max_hp\n", "    while xp >= level * 100:\n        level += 1\n")
+          text = text.replace("var d:=abs(combat_player_cell.x-combat_enemy_cell.x)+abs(combat_player_cell.y-combat_enemy_cell.y)", "var d:int=abs(combat_player_cell.x-combat_enemy_cell.x)+abs(combat_player_cell.y-combat_enemy_cell.y)")
+          text = text.replace("var chance:=base-d*4", "var chance:int=base-d*4")
           p.write_text(text)
           PY
-
-      - name: Import project
+      - name: Validate project
         run: godot --headless --editor --quit --path .
-
       - name: Build APK
-        run: mkdir -p build && godot --headless --verbose --path . --export-debug "Android" build/PostApocalypseRPG.apk
-
+        run: mkdir -p build && godot --headless --path . --export-debug "Android" build/PostApocalypseRPG.apk
       - name: Verify APK
         run: test -s build/PostApocalypseRPG.apk && ls -lh build/PostApocalypseRPG.apk
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
