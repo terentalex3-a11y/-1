@@ -11,7 +11,7 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
 [display/window]
-handheld/orientation=1
+handheld/orientation=0
 
 [rendering]
 renderer/rendering_method="gl_compatibility"
