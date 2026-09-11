@@ -1,9 +1,11 @@
 extends Node
 
 var inventory: Array[Dictionary] = [
-    {"name":"Старый пистолет", "type":"weapon", "damage":18, "ammo":6, "weight":1.2, "durability":72},
+    {"name":"Старый пистолет", "type":"weapon", "damage":18, "ammo":6, "weight":1.2, "durability":72, "rarity":"Обычный", "mods":[]},
     {"name":"Бинт", "type":"medical", "heal":25, "weight":0.2, "count":2},
-    {"name":"Патроны 9мм", "type":"ammo", "amount":8, "weight":0.3}
+    {"name":"Аптечка", "type":"medical", "heal":55, "weight":0.7, "count":1},
+    {"name":"Патроны 9мм", "type":"ammo", "amount":8, "weight":0.3, "count":1},
+    {"name":"Самодельный нож", "type":"weapon", "damage":12, "weight":0.8, "durability":90, "rarity":"Обычный", "mods":[]}
 ]
 var equipped_weapon := 0
 var body_armor := {"name":"Потрёпанная куртка", "protection":4, "weight":1.5, "durability":60}
