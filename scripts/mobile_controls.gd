@@ -7,6 +7,7 @@ var joystick_center := Vector2.ZERO
 var joystick_knob := Vector2.ZERO
 var joystick_radius := 78.0
 var active_touch := -1
+var last_grid_direction := Vector2i.ZERO
 
 func _ready():
     set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -19,18 +20,29 @@ func _input(event):
             active_touch = event.index
             joystick_center = event.position
             joystick_knob = event.position
+            last_grid_direction = Vector2i.ZERO
             queue_redraw()
         elif not event.pressed and event.index == active_touch:
             active_touch = -1
             joystick_knob = joystick_center
+            last_grid_direction = Vector2i.ZERO
             queue_redraw()
     elif event is InputEventScreenDrag and event.index == active_touch:
         var delta: Vector2 = event.position - joystick_center
         if delta.length() > joystick_radius:
             delta = delta.normalized() * joystick_radius
         joystick_knob = joystick_center + delta
-        if delta.length() > 18.0:
-            move_requested.emit(delta.normalized())
+        if delta.length() > 22.0:
+            var direction := Vector2i.ZERO
+            if abs(delta.x) >= abs(delta.y):
+                direction.x = 1 if delta.x > 0 else -1
+            else:
+                direction.y = 1 if delta.y > 0 else -1
+            if direction != last_grid_direction:
+                last_grid_direction = direction
+                move_requested.emit(Vector2(direction))
+        else:
+            last_grid_direction = Vector2i.ZERO
         queue_redraw()
 
 func _draw():
