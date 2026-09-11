@@ -26,6 +26,8 @@ var combat_enemy_cell := Vector2i(18, 5)
 var combat_covers := [Vector2i(9,3),Vector2i(10,3),Vector2i(13,7),Vector2i(14,7),Vector2i(16,3)]
 var combat_selected_target := "torso"
 var defensive_stance := false
+var combat_path: Array[Vector2i] = []
+var combat_path_cost := 0
 var message := "Вы очнулись в разрушенном городе. Найдите припасы."
 var wounds := {"head":0,"torso":0,"arm":0,"leg":0}
 var game_over := false
@@ -119,12 +121,13 @@ func check_interactions():
 func start_combat(enemy_index:int):
     combat=true; selected_enemy=enemy_index; ap=max_ap; defensive_stance=false
     combat_player_cell=Vector2i(4,5); combat_enemy_cell=Vector2i(18,5)
-    combat_selected_target="torso"
-    message="БОЙ! Передвигайтесь по клеткам, занимайте укрытия и экономьте AP."
+    combat_selected_target="torso"; combat_path.clear(); combat_path_cost=0
+    message="БОЙ! Тапните по клетке назначения — путь покажет расход AP."
     mobile_controls.set_mobile_mode(false)
 
 func finish_combat(victory:bool):
     combat=false; selected_enemy=-1; ap=max_ap; defensive_stance=false
+    combat_path.clear(); combat_path_cost=0
     mobile_controls.set_mobile_mode(true)
     if victory: message="ВРАГ УБИТ. +50 XP."
     check_level()
@@ -135,18 +138,57 @@ func combat_cell_valid(c:Vector2i)->bool:
 func combat_cover_at(c:Vector2i)->bool:
     return combat_covers.has(c)
 
+func combat_cell_blocked(c:Vector2i)->bool:
+    return c==combat_enemy_cell or combat_cover_at(c)
+
+func build_combat_path(target:Vector2i) -> Array[Vector2i]:
+    var result: Array[Vector2i] = []
+    if not combat_cell_valid(target) or target==combat_player_cell or target==combat_enemy_cell:
+        return result
+    var current:=combat_player_cell
+    var guard:=0
+    while current!=target and guard<240:
+        guard+=1
+        var candidates: Array[Vector2i] = []
+        var dx:=target.x-current.x
+        var dy:=target.y-current.y
+        if abs(dx)>=abs(dy) and dx!=0:
+            candidates.append(current+Vector2i(sign(dx),0))
+        if dy!=0:
+            candidates.append(current+Vector2i(0,sign(dy)))
+        if dx!=0 and abs(dx)<abs(dy):
+            candidates.append(current+Vector2i(sign(dx),0))
+        var moved:=false
+        for c in candidates:
+            if combat_cell_valid(c) and not combat_cell_blocked(c):
+                current=c; result.append(c); moved=true; break
+        if not moved: return []
+    if current!=target: return []
+    return result
+
+func select_combat_destination(target:Vector2i):
+    combat_path=build_combat_path(target)
+    combat_path_cost=combat_path.size()
+    if combat_path.is_empty():
+        if target==combat_enemy_cell:
+            message="Клетка занята врагом."
+        elif target==combat_player_cell:
+            message="Вы уже на этой клетке."
+        else:
+            message="Путь сюда заблокирован."
+        return
+    if combat_path_cost>ap:
+        message="Путь: %d AP. Доступно: %d AP."%[combat_path_cost,ap]
+        return
+    for c in combat_path:
+        combat_player_cell=c
+        ap-=1
+    defensive_stance=false
+    message="Перемещение: -%d AP. Осталось %d AP. %s"%[combat_path_cost,ap,"УКРЫТИЕ." if combat_cover_at(combat_player_cell) else "Открытая позиция."]
+    combat_path.clear(); combat_path_cost=0
+
 func move_in_combat(target:Vector2i):
-    if not combat_cell_valid(target): return
-    var dx:=target.x-combat_player_cell.x
-    var dy:=target.y-combat_player_cell.y
-    var steps:=abs(dx)+abs(dy)
-    if steps != 1:
-        message="За один клик можно перейти только на соседнюю клетку."; return
-    if target==combat_enemy_cell:
-        message="Клетка занята врагом."; return
-    if ap<1: message="Недостаточно AP."; return
-    combat_player_cell=target; ap-=1; defensive_stance=false
-    message="Перемещение: -1 AP. %s" % ("УКРЫТИЕ." if combat_cover_at(target) else "Открытая позиция.")
+    select_combat_destination(target)
 
 func handle_combat_pointer(p:Vector2):
     if Rect2(20,610,190,95).has_point(p): open_inventory(); return
@@ -304,10 +346,17 @@ func draw_combat():
             draw_rect(r,Color("252525")); draw_rect(r,Color("3b3b3b"),false,1)
     for c in combat_covers:
         draw_rect(Rect2(48+c.x*grid_size,90+c.y*grid_size,grid_size-2,grid_size-2),Color("5b5140"))
+    for i in range(combat_path.size()):
+        var pc:=combat_path[i]
+        var pr:=Rect2(48+pc.x*grid_size+5,90+pc.y*grid_size+5,grid_size-12,grid_size-12)
+        draw_rect(pr,Color("365a42"))
+        draw_string(ThemeDB.fallback_font,pr.position+Vector2(8,29),str(i+1),HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color("eeeeee"))
     draw_circle(Vector2(48+(combat_player_cell.x+.5)*grid_size,90+(combat_player_cell.y+.5)*grid_size),15,Color("5c91c9"))
     draw_circle(Vector2(48+(combat_enemy_cell.x+.5)*grid_size,90+(combat_enemy_cell.y+.5)*grid_size),15,Color("a53a3a"))
     draw_string(ThemeDB.fallback_font,Vector2(25,35),"ТАКТИЧЕСКИЙ БОЙ — КЛЕТКИ",HORIZONTAL_ALIGNMENT_LEFT,500,24,Color("eeeeee"))
     draw_string(ThemeDB.fallback_font,Vector2(25,65),"HP %d/%d   AP %d/%d   Патроны %d   Цель: %s"%[hp,max_hp,ap,max_ap,ammo,target_name(combat_selected_target)],HORIZONTAL_ALIGNMENT_LEFT,1000,20,Color("dddddd"))
+    if combat_path_cost>0:
+        draw_string(ThemeDB.fallback_font,Vector2(930,65),"ПУТЬ: %d AP"%combat_path_cost,HORIZONTAL_ALIGNMENT_LEFT,300,20,Color("eeeeee"))
     draw_string(ThemeDB.fallback_font,Vector2(25,575),message,HORIZONTAL_ALIGNMENT_LEFT,1200,18,Color("c8c8c8"))
 
 func draw_hud():
