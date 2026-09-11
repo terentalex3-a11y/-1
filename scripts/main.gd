@@ -3,31 +3,32 @@ extends Node2D
 var state: Node
 var inventory_screen: Control
 var mobile_controls: Control
-var ap := 6
-var max_ap := 6
+var rng := RandomNumberGenerator.new()
+var grid_size := 48.0
+var world_origin := Vector2(48, 96)
+var world_cols := 24
+var world_rows := 10
+var player_cell := Vector2i(12, 5)
+var enemies := [Vector2i(17, 4), Vector2i(7, 8)]
+var loot := [Vector2i(5, 3), Vector2i(20, 8)]
 var hp := 100
 var max_hp := 100
+var ap := 6
+var max_ap := 6
 var ammo := 8
 var level := 1
 var xp := 0
-var player_pos := Vector2(640, 360)
-var enemies := [Vector2(900, 280), Vector2(400, 520)]
-var loot := [Vector2(300, 260), Vector2(1030, 500)]
-var message := "Вы очнулись в разрушенном городе. Найдите припасы."
 var combat := false
 var selected_enemy := -1
 var enemy_hp := [55, 45]
-var wounds := {"head":0,"torso":0,"arm":0,"leg":0}
-var rng := RandomNumberGenerator.new()
-var enemy_attack_flash := 0.0
-var game_over := false
-var combat_player_pos := Vector2(300, 360)
-var combat_enemy_pos := Vector2(930, 360)
-var combat_cover := false
-var enemy_cover := false
-var defensive_stance := false
+var combat_player_cell := Vector2i(4, 5)
+var combat_enemy_cell := Vector2i(18, 5)
+var combat_covers := [Vector2i(9,3),Vector2i(10,3),Vector2i(13,7),Vector2i(14,7),Vector2i(16,3)]
 var combat_selected_target := "torso"
-var combat_covers := [Rect2(430, 180, 110, 70), Rect2(600, 410, 120, 70), Rect2(760, 180, 100, 65)]
+var defensive_stance := false
+var message := "Вы очнулись в разрушенном городе. Найдите припасы."
+var wounds := {"head":0,"torso":0,"arm":0,"leg":0}
+var game_over := false
 
 func _ready():
     rng.randomize()
@@ -45,75 +46,36 @@ func _ready():
     mobile_controls.action_requested.connect(on_mobile_action)
     queue_redraw()
 
-func _process(delta: float):
-    if enemy_attack_flash > 0.0:
-        enemy_attack_flash -= delta
+func _process(_delta):
     queue_redraw()
 
 func _input(event):
-    if inventory_screen.visible:
+    if inventory_screen.visible or game_over:
         return
     if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-        handle_pointer(event.position)
+        handle_pointer(to_world_point(event.position))
     elif event is InputEventScreenTouch and event.pressed:
-        handle_pointer(event.position)
+        handle_pointer(to_world_point(event.position))
 
 func to_world_point(p: Vector2) -> Vector2:
     var s := get_viewport_rect().size
-    return Vector2(p.x / max(0.01, s.x / 1280.0), p.y / max(0.01, s.y / 720.0))
+    return Vector2(p.x / max(0.01,s.x/1280.0), p.y / max(0.01,s.y/720.0))
 
 func handle_pointer(p: Vector2):
-    if game_over:
-        return
-    var point := to_world_point(p)
-    if Rect2(20, 610, 190, 95).has_point(point):
-        open_inventory()
-        return
+    if Rect2(20,610,190,95).has_point(p):
+        open_inventory(); return
     if combat:
-        handle_combat_pointer(point)
-        return
-    move_to(point)
-
-func handle_combat_pointer(point: Vector2):
-    if Rect2(20, 610, 190, 95).has_point(point):
-        open_inventory()
-    elif Rect2(205, 610, 145, 95).has_point(point):
-        quick_shot()
-    elif Rect2(355, 610, 145, 95).has_point(point):
-        aimed_shot()
-    elif Rect2(505, 610, 145, 95).has_point(point):
-        melee_attack()
-    elif Rect2(655, 610, 125, 95).has_point(point):
-        heal()
-    elif Rect2(785, 610, 125, 95).has_point(point):
-        defend()
-    elif Rect2(915, 610, 165, 95).has_point(point):
-        end_turn()
-    elif Rect2(1085, 610, 175, 95).has_point(point):
-        cycle_target()
-    elif point.y > 85 and point.y < 585:
-        move_in_combat(point)
-
-func move_to(point: Vector2):
-    if point.y < 75 or point.y > 565:
-        return
-    var distance := player_pos.distance_to(point)
-    if distance < 8.0:
-        return
-    var step := min(28.0, distance)
-    player_pos += (point - player_pos).normalized() * step
-    player_pos.x = clamp(player_pos.x, 30.0, 1250.0)
-    player_pos.y = clamp(player_pos.y, 90.0, 550.0)
-    check_interactions()
+        handle_combat_pointer(p); return
+    if p.y >= world_origin.y and p.y < world_origin.y + world_rows*grid_size:
+        move_world_to_cell(world_to_cell(p))
 
 func on_mobile_move(direction: Vector2):
-    if game_over or combat:
+    if combat or game_over:
         return
-    var movement_speed := 1.8 if wounds.leg < 20 else 1.15
-    player_pos += direction * movement_speed
-    player_pos.x = clamp(player_pos.x, 30.0, 1250.0)
-    player_pos.y = clamp(player_pos.y, 90.0, 550.0)
-    check_interactions()
+    var d := Vector2i(round(direction.x),round(direction.y))
+    if d == Vector2i.ZERO:
+        return
+    move_world_to_cell(player_cell + d)
 
 func on_mobile_action(action: String):
     match action:
@@ -122,411 +84,236 @@ func on_mobile_action(action: String):
         "heal": heal()
         "end_turn": end_turn()
 
-func open_inventory():
-    inventory_screen.setup(state.inventory, state.body_armor)
-    inventory_screen.visible = true
-    mobile_controls.set_mobile_mode(false)
-    message = "Инвентарь открыт."
+func world_to_cell(p: Vector2) -> Vector2i:
+    return Vector2i(floor((p-world_origin)/grid_size))
 
-func close_inventory():
-    inventory_screen.visible = false
-    mobile_controls.set_mobile_mode(not combat)
-    message = "Инвентарь закрыт."
+func cell_to_world(c: Vector2i) -> Vector2:
+    return world_origin + Vector2(c)*grid_size + Vector2(grid_size/2,grid_size/2)
 
-func use_item(index: int):
-    if index < 0 or index >= state.inventory.size():
-        return
-    var item: Dictionary = state.inventory[index]
-    if item.get("type", "") != "medical":
-        message = "Этот предмет нельзя использовать сейчас."
-        return
-    var item_name := str(item.get("name", "Медикамент"))
-    var heal_amount := int(item.get("heal", 25))
-    var old_hp := hp
-    hp = min(max_hp, hp + heal_amount)
-    var count := int(item.get("count", 1))
-    if count > 1:
-        item["count"] = count - 1
-    else:
-        state.inventory.remove_at(index)
-    message = "%s: +%d HP." % [item_name, hp - old_hp]
-    inventory_screen.setup(state.inventory, state.body_armor)
+func valid_world_cell(c: Vector2i) -> bool:
+    return c.x >= 0 and c.x < world_cols and c.y >= 0 and c.y < world_rows
 
-func equip_item(index: int):
-    if index < 0 or index >= state.inventory.size():
+func move_world_to_cell(target: Vector2i):
+    if not valid_world_cell(target): return
+    var dx := target.x-player_cell.x
+    var dy := target.y-player_cell.y
+    if abs(dx)+abs(dy) != 1:
+        message = "Двигайтесь по соседним клеткам."
         return
-    var item: Dictionary = state.inventory[index]
-    if item.get("type", "") == "weapon":
-        state.equipped_weapon = index
-        if item.has("ammo"):
-            ammo = int(item.get("ammo", ammo))
-        message = "Оружие экипировано: %s." % str(item.get("name", "оружие"))
-    elif item.get("type", "") == "armor":
-        state.body_armor = item.duplicate(true)
-        state.inventory.remove_at(index)
-        message = "Экипировано: %s." % str(item.get("name", "броня"))
-        inventory_screen.setup(state.inventory, state.body_armor)
+    player_cell = target
+    check_interactions()
 
 func check_interactions():
-    if combat:
-        return
     for i in range(enemies.size()):
-        if enemies[i].x > 0.0 and player_pos.distance_to(enemies[i]) < 70.0:
-            start_combat(i)
-            return
+        if enemies[i] == player_cell:
+            start_combat(i); return
     for p in loot.duplicate():
-        if player_pos.distance_to(p) < 55.0:
+        if p == player_cell:
             loot.erase(p)
-            state.add_item({"name":"Найденные патроны", "type":"ammo", "amount":4, "weight":0.15, "count":1})
-            ammo += 4
-            xp += 15
-            message = "Найдено: 4 патрона."
-            check_level()
-            return
-    if player_pos.distance_to(Vector2(640, 360)) < 80.0:
+            state.add_item({"name":"Найденные патроны","type":"ammo","amount":4,"weight":0.15,"count":1})
+            ammo += 4; xp += 15
+            message = "Найдено: 4 патрона."; check_level(); return
+    if player_cell == Vector2i(12,5):
         message = "Убежище. Здесь можно управлять запасами."
 
-func start_combat(enemy_index: int):
-    combat = true
-    selected_enemy = enemy_index
-    ap = max_ap
-    combat_player_pos = Vector2(300, 360)
-    combat_enemy_pos = Vector2(930, 360)
-    combat_cover = false
-    enemy_cover = false
-    defensive_stance = false
-    combat_selected_target = "torso"
-    message = "ВРАГ ОБНАРУЖЕН! Используйте укрытия, движение и разные атаки."
+func start_combat(enemy_index:int):
+    combat=true; selected_enemy=enemy_index; ap=max_ap; defensive_stance=false
+    combat_player_cell=Vector2i(4,5); combat_enemy_cell=Vector2i(18,5)
+    combat_selected_target="torso"
+    message="БОЙ! Передвигайтесь по клеткам, занимайте укрытия и экономьте AP."
     mobile_controls.set_mobile_mode(false)
 
-func finish_combat(victory: bool):
-    combat = false
-    selected_enemy = -1
-    ap = max_ap
-    defensive_stance = false
+func finish_combat(victory:bool):
+    combat=false; selected_enemy=-1; ap=max_ap; defensive_stance=false
     mobile_controls.set_mobile_mode(true)
-    if victory:
-        message = "ВРАГ УБИТ. +50 XP."
+    if victory: message="ВРАГ УБИТ. +50 XP."
     check_level()
 
-func combat_move_cost(distance: float) -> int:
-    return max(1, int(ceil(distance / 70.0)))
+func combat_cell_valid(c:Vector2i)->bool:
+    return c.x>=0 and c.x<24 and c.y>=0 and c.y<10
 
-func is_in_cover(pos: Vector2) -> bool:
-    for cover in combat_covers:
-        if cover.grow(20).has_point(pos):
-            return true
-    return false
+func combat_cover_at(c:Vector2i)->bool:
+    return combat_covers.has(c)
 
-func move_in_combat(point: Vector2):
-    var distance := combat_player_pos.distance_to(point)
-    if distance < 15.0:
-        return
-    var cost := combat_move_cost(distance)
-    if cost > ap:
-        message = "Недостаточно AP для перемещения. Нужно %d AP." % cost
-        return
-    combat_player_pos += (point - combat_player_pos).normalized() * min(distance, float(cost * 70))
-    combat_player_pos.x = clamp(combat_player_pos.x, 55.0, 1220.0)
-    combat_player_pos.y = clamp(combat_player_pos.y, 105.0, 560.0)
-    ap -= cost
-    defensive_stance = false
-    combat_cover = is_in_cover(combat_player_pos)
-    message = "Перемещение: -%d AP. %s" % [cost, "Вы заняли укрытие." if combat_cover else "Открытая позиция."]
+func move_in_combat(target:Vector2i):
+    if not combat_cell_valid(target): return
+    var dx:=target.x-combat_player_cell.x
+    var dy:=target.y-combat_player_cell.y
+    var steps:=abs(dx)+abs(dy)
+    if steps != 1:
+        message="За один клик можно перейти только на соседнюю клетку."; return
+    if target==combat_enemy_cell:
+        message="Клетка занята врагом."; return
+    if ap<1: message="Недостаточно AP."; return
+    combat_player_cell=target; ap-=1; defensive_stance=false
+    message="Перемещение: -1 AP. %s" % ("УКРЫТИЕ." if combat_cover_at(target) else "Открытая позиция.")
+
+func handle_combat_pointer(p:Vector2):
+    if Rect2(20,610,190,95).has_point(p): open_inventory(); return
+    if Rect2(205,610,145,95).has_point(p): quick_shot(); return
+    if Rect2(355,610,145,95).has_point(p): aimed_shot(); return
+    if Rect2(505,610,145,95).has_point(p): melee_attack(); return
+    if Rect2(655,610,125,95).has_point(p): heal(); return
+    if Rect2(785,610,125,95).has_point(p): defend(); return
+    if Rect2(915,610,165,95).has_point(p): end_turn(); return
+    if Rect2(1085,610,175,95).has_point(p): cycle_target(); return
+    if p.y>=90 and p.y<585:
+        move_in_combat(world_to_cell(p))
 
 func cycle_target():
-    var targets := ["torso", "head", "arm", "leg"]
-    var index := targets.find(combat_selected_target)
-    combat_selected_target = targets[(index + 1) % targets.size()]
-    message = "Цель: %s. Нажмите ещё раз для следующей зоны." % target_name(combat_selected_target)
+    var targets=["torso","head","arm","leg"]
+    combat_selected_target=targets[(targets.find(combat_selected_target)+1)%targets.size()]
+    message="Цель: %s" % target_name(combat_selected_target)
 
-func target_name(part: String) -> String:
+func target_name(part:String)->String:
     match part:
         "head": return "ГОЛОВА"
         "arm": return "РУКА"
         "leg": return "НОГА"
     return "КОРПУС"
 
-func attack_chance(base: int) -> int:
-    var distance := combat_player_pos.distance_to(combat_enemy_pos)
-    var chance := base - int(distance / 22.0)
-    if combat_cover:
-        chance += 7
-    if wounds.arm >= 20:
-        chance -= 15
-    return clamp(chance, 10, 95)
+func attack_chance(base:int)->int:
+    var d:=abs(combat_player_cell.x-combat_enemy_cell.x)+abs(combat_player_cell.y-combat_enemy_cell.y)
+    var chance:=base-d*4
+    if combat_cover_at(combat_player_cell): chance+=10
+    if combat_cover_at(combat_enemy_cell): chance-=25
+    if wounds.arm>=20: chance-=15
+    return clamp(chance,10,95)
 
-func do_shot(ap_cost: int, damage_mult: float, chance_base: int, label: String):
-    if not combat or selected_enemy < 0:
-        message = "Сейчас вы не в бою."
-        return
-    if ap < ap_cost:
-        message = "Недостаточно AP."
-        return
-    if ammo <= 0:
-        message = "Нет патронов."
-        return
-    ammo -= 1
-    ap -= ap_cost
-    defensive_stance = false
-    var chance := attack_chance(chance_base)
-    if rng.randi_range(1, 100) <= chance:
-        var weapon_damage := 20
-        if state.equipped_weapon >= 0 and state.equipped_weapon < state.inventory.size():
-            weapon_damage = int(state.inventory[state.equipped_weapon].get("damage", 20))
-        var result: Dictionary = preload("res://scripts/combat_system.gd").body_damage(combat_selected_target, int(weapon_damage * damage_mult))
-        var dealt := int(result.get("damage", weapon_damage))
-        enemy_hp[selected_enemy] -= dealt
-        message = "%s: %s — %d урона. Шанс %d%%. AP %d." % [label, target_name(combat_selected_target), dealt, chance, ap]
-        if enemy_hp[selected_enemy] <= 0:
-            xp += 50
-            enemies[selected_enemy] = Vector2(-100, -100)
-            finish_combat(true)
-            return
-    else:
-        message = "%s: ПРОМАХ. Шанс %d%%. AP %d." % [label, chance, ap]
+func do_shot(cost:int,mult:float,base:int,label:String):
+    if not combat or selected_enemy<0:return
+    if ap<cost: message="Недостаточно AP."; return
+    if ammo<=0: message="Нет патронов."; return
+    ammo-=1; ap-=cost; defensive_stance=false
+    var chance:=attack_chance(base)
+    if rng.randi_range(1,100)<=chance:
+        var weapon_damage:=20
+        if state.equipped_weapon>=0 and state.equipped_weapon<state.inventory.size():
+            weapon_damage=int(state.inventory[state.equipped_weapon].get("damage",20))
+        var result:Dictionary=preload("res://scripts/combat_system.gd").body_damage(combat_selected_target,int(weapon_damage*mult))
+        var dealt:=int(result.get("damage",weapon_damage)); enemy_hp[selected_enemy]-=dealt
+        message="%s: %s — %d урона. Шанс %d%%. AP %d."%[label,target_name(combat_selected_target),dealt,chance,ap]
+        if enemy_hp[selected_enemy]<=0:
+            xp+=50; enemies[selected_enemy]=Vector2i(-99,-99); finish_combat(true)
+    else: message="%s: ПРОМАХ. Шанс %d%%. AP %d."%[label,chance,ap]
 
-func quick_shot():
-    do_shot(2, 0.9, 82, "БЫСТРЫЙ ВЫСТРЕЛ")
-
-func aimed_shot():
-    do_shot(3, 1.35, 68, "ПРИЦЕЛЬНЫЙ ВЫСТРЕЛ")
+func quick_shot(): do_shot(2,0.9,82,"БЫСТРЫЙ ВЫСТРЕЛ")
+func aimed_shot(): do_shot(3,1.35,68,"ПРИЦЕЛЬНЫЙ ВЫСТРЕЛ")
 
 func melee_attack():
-    if not combat or selected_enemy < 0:
-        return
-    var distance := combat_player_pos.distance_to(combat_enemy_pos)
-    if distance > 120.0:
-        message = "Слишком далеко для удара. Подойдите ближе."
-        return
-    if ap < 2:
-        message = "Недостаточно AP для удара."
-        return
-    ap -= 2
-    defensive_stance = false
-    if rng.randi_range(1, 100) <= 88:
-        var result: Dictionary = preload("res://scripts/combat_system.gd").body_damage(combat_selected_target, 18)
-        var dealt := int(result.get("damage", 18))
-        enemy_hp[selected_enemy] -= dealt
-        message = "УДАР: %s — %d урона. AP %d." % [target_name(combat_selected_target), dealt, ap]
-        if enemy_hp[selected_enemy] <= 0:
-            xp += 50
-            enemies[selected_enemy] = Vector2(-100, -100)
-            finish_combat(true)
-    else:
-        message = "УДАР ПРОМАХНУЛСЯ. AP %d." % ap
+    if not combat:return
+    var d:=abs(combat_player_cell.x-combat_enemy_cell.x)+abs(combat_player_cell.y-combat_enemy_cell.y)
+    if d>1: message="Для удара подойдите на соседнюю клетку."; return
+    if ap<2: message="Недостаточно AP."; return
+    ap-=2; defensive_stance=false
+    if rng.randi_range(1,100)<=88:
+        var result:Dictionary=preload("res://scripts/combat_system.gd").body_damage(combat_selected_target,18)
+        var dealt:=int(result.get("damage",18)); enemy_hp[selected_enemy]-=dealt
+        message="УДАР: %s — %d урона. AP %d."%[target_name(combat_selected_target),dealt,ap]
+        if enemy_hp[selected_enemy]<=0:
+            xp+=50; enemies[selected_enemy]=Vector2i(-99,-99); finish_combat(true)
+    else: message="УДАР ПРОМАХНУЛСЯ. AP %d."%ap
 
 func defend():
-    if not combat:
-        return
-    if ap < 1:
-        message = "Недостаточно AP."
-        return
-    ap -= 1
-    defensive_stance = true
-    combat_cover = is_in_cover(combat_player_pos)
-    message = "ОБОРОНА: до следующего хода урон от врага снижен на 50%. AP %d." % ap
-
-func heal():
-    if game_over:
-        return
-    if combat and ap < 2:
-        message = "Недостаточно AP для лечения."
-        return
-    var index := find_medical()
-    if index < 0:
-        return
-    use_item(index)
-    if combat:
-        ap -= 2
-        defensive_stance = false
-        message = "Лечение: -2 AP. Осталось %d AP." % ap
-
-func find_medical() -> int:
-    for i in range(state.inventory.size()):
-        if state.inventory[i].get("type", "") == "medical":
-            return i
-    message = "Медицинских предметов нет."
-    return -1
+    if not combat:return
+    if ap<1: message="Недостаточно AP."; return
+    ap-=1; defensive_stance=true
+    message="ОБОРОНА: урон следующей атаки врага снижен на 50%. AP %d."%ap
 
 func end_turn():
-    if game_over:
-        return
-    if not combat:
-        message = "В мире ход не нужен."
-        return
-    message = "Ваш ход завершён. Враг действует..."
-    enemy_turn()
+    if not combat: message="В мире ход не нужен."; return
+    message="Ход завершён. Враг действует..."; enemy_turn()
 
 func enemy_turn():
-    if not combat or selected_enemy < 0 or game_over:
-        return
-    var distance := combat_enemy_pos.distance_to(combat_player_pos)
-    if distance > 260.0:
-        var step := min(100.0, distance - 150.0)
-        var desired := combat_player_pos
-        var nearest_cover := nearest_cover_to(desired)
-        if rng.randi_range(1, 100) <= 45:
-            desired = nearest_cover
-        combat_enemy_pos += (desired - combat_enemy_pos).normalized() * step
-        combat_enemy_pos.x = clamp(combat_enemy_pos.x, 55.0, 1220.0)
-        combat_enemy_pos.y = clamp(combat_enemy_pos.y, 105.0, 560.0)
-        enemy_cover = is_in_cover(combat_enemy_pos)
-        message = "Враг перемещается и ищет укрытие. Ваш ход."
-    else:
-        enemy_cover = is_in_cover(combat_enemy_pos)
-        var attack_chance_enemy := 72
-        if combat_cover:
-            attack_chance_enemy -= 25
-        if defensive_stance:
-            attack_chance_enemy -= 10
-        if rng.randi_range(1, 100) <= attack_chance_enemy:
-            var raw_damage := rng.randi_range(7, 15)
-            var part: String = preload("res://scripts/combat_system.gd").choose_body_part(rng)
-            wounds[part] = int(wounds.get(part, 0)) + raw_damage
-            var protection := int(state.body_armor.get("protection", 0))
-            var dmg := max(1, raw_damage - int(protection / 2))
-            if defensive_stance:
-                dmg = max(1, int(ceil(float(dmg) * 0.5)))
-            hp = max(0, hp - dmg)
-            enemy_attack_flash = 0.25
-            message = "ВРАГ АТАКУЕТ! %s, -%d HP. Осталось %d/%d." % [target_name(part), dmg, hp, max_hp]
-            if hp <= 0:
-                game_over = true
-                combat = false
-                selected_enemy = -1
-                mobile_controls.set_mobile_mode(false)
-                message = "ВЫ ПОГИБЛИ. Перезапустите игру."
-                return
-        else:
-            message = "Враг стреляет, но промахивается. Ваш ход."
-    defensive_stance = false
-    ap = max_ap
-    combat_cover = is_in_cover(combat_player_pos)
+    if not combat:return
+    var d:=abs(combat_player_cell.x-combat_enemy_cell.x)+abs(combat_player_cell.y-combat_enemy_cell.y)
+    if d>1:
+        var candidates=[combat_enemy_cell+Vector2i(sign(combat_player_cell.x-combat_enemy_cell.x),0),combat_enemy_cell+Vector2i(0,sign(combat_player_cell.y-combat_enemy_cell.y))]
+        for c in candidates:
+            if combat_cell_valid(c) and c!=combat_player_cell and not combat_cover_at(c):
+                combat_enemy_cell=c; break
+        d=abs(combat_player_cell.x-combat_enemy_cell.x)+abs(combat_player_cell.y-combat_enemy_cell.y)
+    if d<=1:
+        var dmg=12
+        if defensive_stance:dmg=6
+        hp-=dmg; message="Враг атакует: -%d HP. Ваш ход."%dmg
+        if hp<=0: hp=0; game_over=true; message="ВЫ ПОГИБЛИ. Перезапустите игру."
+    ap=max_ap; defensive_stance=false
 
-func nearest_cover_to(pos: Vector2) -> Vector2:
-    var best := combat_covers[0].get_center()
-    var best_distance := pos.distance_to(best)
-    for cover in combat_covers:
-        var center := cover.get_center()
-        var d := pos.distance_to(center)
-        if d < best_distance:
-            best = center
-            best_distance = d
-    return best
+func heal():
+    if combat and ap<2: message="Недостаточно AP для лечения."; return
+    var i=find_medical()
+    if i<0:return
+    use_item(i)
+    if combat: ap-=2; message="Лечение: -2 AP. Осталось %d AP."%ap
+
+func find_medical()->int:
+    for i in range(state.inventory.size()):
+        if state.inventory[i].get("type","")=="medical":return i
+    message="Медицинских предметов нет."; return -1
+
+func use_item(index:int):
+    if index<0 or index>=state.inventory.size():return
+    var item:Dictionary=state.inventory[index]
+    if item.get("type","")!="medical": message="Этот предмет нельзя использовать сейчас."; return
+    var old:=hp; hp=min(max_hp,hp+int(item.get("heal",25)))
+    var count:=int(item.get("count",1))
+    if count>1:item["count"]=count-1
+    else:state.inventory.remove_at(index)
+    message="%s: +%d HP."%[str(item.get("name","Медикамент")),hp-old]
+    inventory_screen.setup(state.inventory,state.body_armor)
+
+func equip_item(index:int):
+    if index<0 or index>=state.inventory.size():return
+    var item:Dictionary=state.inventory[index]
+    if item.get("type","")=="weapon":
+        state.equipped_weapon=index; ammo=int(item.get("ammo",ammo)); message="Оружие экипировано: %s."%item.get("name","оружие")
+
+func open_inventory():
+    inventory_screen.setup(state.inventory,state.body_armor); inventory_screen.visible=true; mobile_controls.set_mobile_mode(false); message="Инвентарь открыт."
+func close_inventory():
+    inventory_screen.visible=false; mobile_controls.set_mobile_mode(not combat); message="Инвентарь закрыт."
 
 func check_level():
-    while xp >= level * 100:
-        level += 1
-        message += " Уровень повышен: %d." % level
+    while xp>=level*100:
+        level+=1; max_ap+=1; ap=max_ap; message="УРОВЕНЬ %d! AP увеличены."%level
 
 func _draw():
-    var s := get_viewport_rect().size
-    var scale_x := s.x / 1280.0
-    var scale_y := s.y / 720.0
-    draw_set_transform(Vector2.ZERO, 0.0, Vector2(scale_x, scale_y))
-    draw_rect(Rect2(0, 0, 1280, 720), Color("121417"))
-    if combat:
-        draw_combat_screen()
-    else:
-        draw_world()
-    draw_hud()
+    if combat: draw_combat()
+    else: draw_world()
+    if not inventory_screen.visible: draw_hud()
 
 func draw_world():
-    draw_rect(Rect2(0, 70, 1280, 495), Color("252a29"))
-    draw_rect(Rect2(0, 300, 1280, 100), Color("303333"))
-    draw_rect(Rect2(560, 70, 150, 495), Color("303333"))
-    for x in range(0, 1280, 160):
-        draw_line(Vector2(x, 350), Vector2(x + 70, 350), Color("5b5d57"), 3)
-    for y in range(100, 560, 150):
-        draw_line(Vector2(635, y), Vector2(635, y + 55), Color("5b5d57"), 3)
-    var buildings = [Rect2(20,90,250,180), Rect2(300,95,220,165), Rect2(760,90,230,175), Rect2(1030,100,220,170), Rect2(20,420,250,120), Rect2(290,420,230,125), Rect2(760,420,230,125), Rect2(1030,415,220,130)]
-    for b in buildings:
-        draw_rect(b, Color("3a3d3c"))
-        draw_rect(Rect2(b.position + Vector2(8,8), b.size - Vector2(16,16)), Color("303332"), false, 3)
-        for wx in range(int(b.position.x + 25), int(b.end.x - 20), 45):
-            draw_rect(Rect2(wx, b.position.y + 28, 22, 16), Color("565951"))
-        draw_line(b.position + Vector2(12, b.size.y - 18), b.end - Vector2(12,18), Color("1b1d1c"), 5)
-    for r in [Vector2(280,285),Vector2(735,275),Vector2(540,475),Vector2(1005,380),Vector2(75,350)]:
-        draw_circle(r, 24, Color("1d201f"))
-        draw_circle(r + Vector2(-9,-5), 9, Color("55524b"))
-        draw_circle(r + Vector2(11,7), 7, Color("67635a"))
-    draw_rect(Rect2(575,315,130,90), Color("4b5d4d"))
-    draw_rect(Rect2(585,325,110,70), Color("354436"))
-    draw_rect(Rect2(610,345,60,50), Color("1a201b"))
-    draw_string(ThemeDB.fallback_font, Vector2(592,312), "УБЕЖИЩЕ", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("d9e0d6"))
-    for p in loot:
-        draw_rect(Rect2(p - Vector2(16,13), Vector2(32,26)), Color("80663a"))
-        draw_rect(Rect2(p - Vector2(13,10), Vector2(26,20)), Color("a4874e"), false, 3)
-        draw_string(ThemeDB.fallback_font, p + Vector2(-20,30), "ЛУТ", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("e0c987"))
-    for e in enemies:
-        if e.x > 0:
-            draw_circle(e, 19, Color("7a2f2f"))
-            draw_circle(e + Vector2(0,-18), 10, Color("b64b45"))
-            draw_string(ThemeDB.fallback_font, e + Vector2(-26,32), "ВРАГ", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("e09b96"))
-    draw_circle(player_pos, 22, Color("6d8794"))
-    draw_circle(player_pos + Vector2(0,-20), 11, Color("b5c3c7"))
-    draw_string(ThemeDB.fallback_font, player_pos + Vector2(-30,38), "ВЫ", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("dce8eb"))
+    draw_rect(Rect2(0,0,1280,720),Color("151515"))
+    for y in range(world_rows):
+        for x in range(world_cols):
+            var r:=Rect2(world_origin+Vector2(x,y)*grid_size,Vector2(grid_size-2,grid_size-2))
+            draw_rect(r,Color("222222")); draw_rect(r,Color("303030"),false,1)
+    for c in loot: draw_circle(cell_to_world(c),12,Color("d4a62a"))
+    for c in enemies:
+        if c.x>=0: draw_circle(cell_to_world(c),15,Color("a53a3a"))
+    draw_circle(cell_to_world(player_cell),15,Color("5c91c9"))
+    draw_string(ThemeDB.fallback_font,Vector2(25,40),"МИР — клеточное перемещение | шаг = 1 клетка",HORIZONTAL_ALIGNMENT_LEFT,700,24,Color("dddddd"))
+    draw_string(ThemeDB.fallback_font,Vector2(25,70),message,HORIZONTAL_ALIGNMENT_LEFT,1200,20,Color("c8c8c8"))
 
-func draw_combat_screen():
-    draw_rect(Rect2(0, 70, 1280, 495), Color("242824"))
-    draw_rect(Rect2(0, 300, 1280, 90), Color("2e332f"))
-    for x in range(40, 1260, 80):
-        draw_line(Vector2(x, 90), Vector2(x, 565), Color("343a35"), 1)
-    for y in range(100, 570, 70):
-        draw_line(Vector2(20, y), Vector2(1260, y), Color("343a35"), 1)
-    for cover in combat_covers:
-        draw_rect(cover, Color("4c514a"))
-        draw_rect(cover.grow(-7), Color("343934"))
-        draw_string(ThemeDB.fallback_font, cover.position + Vector2(8, 20), "УКРЫТИЕ", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("aeb5aa"))
-    if combat_cover:
-        draw_circle(combat_player_pos, 34, Color(0.3,0.7,0.4,0.18))
-        draw_string(ThemeDB.fallback_font, combat_player_pos + Vector2(-35,-35), "УКРЫТИЕ", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("8dd39a"))
-    if enemy_cover:
-        draw_circle(combat_enemy_pos, 34, Color(0.65,0.45,0.25,0.16))
-        draw_string(ThemeDB.fallback_font, combat_enemy_pos + Vector2(-35,-35), "УКРЫТИЕ", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("d5b184"))
-    if defensive_stance:
-        draw_circle(combat_player_pos, 42, Color(0.35,0.55,0.75,0.16))
-        draw_string(ThemeDB.fallback_font, combat_player_pos + Vector2(-35,48), "ОБОРОНА", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("9fc2e2"))
-    draw_circle(combat_player_pos, 23, Color("6d8794"))
-    draw_circle(combat_player_pos + Vector2(0,-20), 11, Color("b5c3c7"))
-    draw_circle(combat_enemy_pos, 23, Color("8b3535"))
-    draw_circle(combat_enemy_pos + Vector2(0,-20), 11, Color("c65a52"))
-    draw_string(ThemeDB.fallback_font, Vector2(255,105), "ВАША ПОЗИЦИЯ", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("d8e1e3"))
-    draw_string(ThemeDB.fallback_font, Vector2(875,105), "ВРАГ: %d HP" % enemy_hp[selected_enemy], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("f0b0a8"))
-    draw_string(ThemeDB.fallback_font, Vector2(30,595), "Тап по полю — ходьба. Укрытие снижает шанс попадания. Движение и атаки тратят AP.", HORIZONTAL_ALIGNMENT_LEFT, 1220, 14, Color("c6c8c0"))
+func draw_combat():
+    draw_rect(Rect2(0,0,1280,720),Color("121212"))
+    for y in range(10):
+        for x in range(24):
+            var r:=Rect2(48+x*grid_size,90+y*grid_size,grid_size-2,grid_size-2)
+            draw_rect(r,Color("252525")); draw_rect(r,Color("3b3b3b"),false,1)
+    for c in combat_covers:
+        draw_rect(Rect2(48+c.x*grid_size,90+c.y*grid_size,grid_size-2,grid_size-2),Color("5b5140"))
+    draw_circle(Vector2(48+(combat_player_cell.x+.5)*grid_size,90+(combat_player_cell.y+.5)*grid_size),15,Color("5c91c9"))
+    draw_circle(Vector2(48+(combat_enemy_cell.x+.5)*grid_size,90+(combat_enemy_cell.y+.5)*grid_size),15,Color("a53a3a"))
+    draw_string(ThemeDB.fallback_font,Vector2(25,35),"ТАКТИЧЕСКИЙ БОЙ — КЛЕТКИ",HORIZONTAL_ALIGNMENT_LEFT,500,24,Color("eeeeee"))
+    draw_string(ThemeDB.fallback_font,Vector2(25,65),"HP %d/%d   AP %d/%d   Патроны %d   Цель: %s"%[hp,max_hp,ap,max_ap,ammo,target_name(combat_selected_target)],HORIZONTAL_ALIGNMENT_LEFT,1000,20,Color("dddddd"))
+    draw_string(ThemeDB.fallback_font,Vector2(25,575),message,HORIZONTAL_ALIGNMENT_LEFT,1200,18,Color("c8c8c8"))
 
 func draw_hud():
-    draw_rect(Rect2(0, 0, 1280, 70), Color("181b1c"))
-    draw_string(ThemeDB.fallback_font, Vector2(20, 28), "HP %d/%d" % [hp, max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("e5d7d0"))
-    draw_string(ThemeDB.fallback_font, Vector2(140, 28), "Патроны %d" % ammo, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("d9d0ad"))
-    draw_string(ThemeDB.fallback_font, Vector2(275, 28), "LVL %d  XP %d" % [level, xp], HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("b9c9bd"))
-    if combat:
-        draw_string(ThemeDB.fallback_font, Vector2(455, 28), "AP %d/%d" % [ap, max_ap], HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("e7c879"))
-        draw_string(ThemeDB.fallback_font, Vector2(600, 28), "Цель: %s" % target_name(combat_selected_target), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("d6d9d1"))
-        draw_string(ThemeDB.fallback_font, Vector2(790, 28), "Укрытие" if combat_cover else "Открыто", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("9bd09f") if combat_cover else Color("d19b8d"))
-        draw_string(ThemeDB.fallback_font, Vector2(920, 28), "Оборона" if defensive_stance else "Обычная стойка", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("9fc2e2"))
-    else:
-        draw_string(ThemeDB.fallback_font, Vector2(455, 28), "Мир: медленное перемещение", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("bfc5bb"))
-    draw_rect(Rect2(20, 610, 190, 95), Color("303538"))
-    draw_string(ThemeDB.fallback_font, Vector2(38, 652), "ИНВЕНТАРЬ", HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("d9ddda"))
-    if combat:
-        draw_button(Rect2(205,610,145,95), "БЫСТРЫЙ\nВЫСТРЕЛ", Color("5a4740"))
-        draw_button(Rect2(355,610,145,95), "ПРИЦЕЛЬНЫЙ\nВЫСТРЕЛ", Color("5b5540"))
-        draw_button(Rect2(505,610,145,95), "УДАР", Color("514246"))
-        draw_button(Rect2(655,610,125,95), "ЛЕЧЕНИЕ\n2 AP", Color("3f5144"))
-        draw_button(Rect2(785,610,125,95), "ЗАЩИТА\n1 AP", Color("414f5c"))
-        draw_button(Rect2(915,610,165,95), "ЗАВЕРШИТЬ\nХОД", Color("4a4c42"))
-        draw_button(Rect2(1085,610,175,95), "ЦЕЛЬ: %s" % target_name(combat_selected_target), Color("41464a"))
-    else:
-        draw_string(ThemeDB.fallback_font, Vector2(240,650), message, HORIZONTAL_ALIGNMENT_LEFT, 1000, 17, Color("d4d3c8"))
-        draw_string(ThemeDB.fallback_font, Vector2(240,680), "В бою: AP, укрытия, движение, разные атаки и зоны попадания.", HORIZONTAL_ALIGNMENT_LEFT, 1000, 14, Color("8f9890"))
-
-func draw_button(rect: Rect2, text: String, fill: Color):
-    draw_rect(rect, fill)
-    draw_rect(rect, Color("858980"), false, 2)
-    var lines := text.split("\n")
-    var y := rect.position.y + 38
-    for line in lines:
-        draw_string(ThemeDB.fallback_font, Vector2(rect.position.x + 8, y), line, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 16, 14, Color("e3e1d8"))
-        y += 23
+    var buttons=[Rect2(20,610,190,95),Rect2(205,610,145,95),Rect2(355,610,145,95),Rect2(505,610,145,95),Rect2(655,610,125,95),Rect2(785,610,125,95),Rect2(915,610,165,95),Rect2(1085,610,175,95)]
+    var labels=["ИНВЕНТАРЬ","БЫСТРЫЙ","ПРИЦЕЛЬНЫЙ","УДАР","ЛЕЧИТЬ","ОБОРОНА","ЗАВЕРШИТЬ ХОД","ЦЕЛЬ"]
+    var count:=8 if combat else 1
+    for i in range(count):
+        draw_rect(buttons[i],Color("303030")); draw_rect(buttons[i],Color("777777"),false,2)
+        draw_string(ThemeDB.fallback_font,buttons[i].position+Vector2(10,52),labels[i],HORIZONTAL_ALIGNMENT_LEFT,buttons[i].size.x-15,18,Color("eeeeee"))
