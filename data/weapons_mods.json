@@ -1,0 +1,9 @@
+{
+  "mods": [
+    {"id":"red_dot","name":"Коллиматор","type":"optic","accuracy":8,"weight":0.2},
+    {"id":"extended_mag","name":"Увеличенный магазин","type":"magazine","capacity":4,"weight":0.25},
+    {"id":"stock","name":"Усиленный приклад","type":"stock","accuracy":4,"melee":3,"weight":0.6},
+    {"id":"suppressor","name":"Глушитель","type":"muzzle","accuracy":-2,"stealth":15,"weight":0.4},
+    {"id":"flashlight","name":"Тактический фонарь","type":"utility","accuracy":2,"weight":0.15}
+  ]
+}
