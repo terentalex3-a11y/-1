@@ -21,11 +21,13 @@ func _input(event):
             joystick_center = event.position
             joystick_knob = event.position
             last_grid_direction = Vector2i.ZERO
+            get_viewport().set_input_as_handled()
             queue_redraw()
         elif not event.pressed and event.index == active_touch:
             active_touch = -1
             joystick_knob = joystick_center
             last_grid_direction = Vector2i.ZERO
+            get_viewport().set_input_as_handled()
             queue_redraw()
     elif event is InputEventScreenDrag and event.index == active_touch:
         var delta: Vector2 = event.position - joystick_center
@@ -43,6 +45,7 @@ func _input(event):
                 move_requested.emit(Vector2(direction))
         else:
             last_grid_direction = Vector2i.ZERO
+        get_viewport().set_input_as_handled()
         queue_redraw()
 
 func _draw():
